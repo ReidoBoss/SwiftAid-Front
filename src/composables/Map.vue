@@ -82,7 +82,8 @@ const searchRoute = async () => {
   console.log(destinationQuery);
 
   // Filter out empty origin inputs
-  console.log(responders.value)
+  console.log(city)
+  
   const originQueries = responders.value
     .filter(
       (responder) =>
@@ -91,7 +92,6 @@ const searchRoute = async () => {
         responder.type == props.type
     )
     .map((responder) => encodeURIComponent(responder.name));
-  console.log(originQueries);
 
   try {
     const destinationResponse = await fetch(

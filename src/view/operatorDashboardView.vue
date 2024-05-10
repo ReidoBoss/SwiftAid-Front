@@ -350,21 +350,18 @@ const getCityResponders = async (description, type) => {
       type == "fire"
     ) {
       city_responders.value.push({ eru: responders.value[i].name });
-      return;
     } else if (
       responders.value[i].location == city &&
       responders.value[i].type == "police" &&
       type == "police"
     ) {
       city_responders.value.push({ eru: responders.value[i].name });
-      return;
     } else if (
       responders.value[i].location == city &&
       responders.value[i].type == "hospital" &&
       type == "hospital"
     ) {
       city_responders.value.push({ eru: responders.value[i].name });
-      return;
     }
   }
 };
