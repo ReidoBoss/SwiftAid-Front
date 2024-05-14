@@ -208,387 +208,397 @@ dashboard
   
 </template>
 <script setup>
-import testAlert from "../testComposables/testAlert.vue";
-import EditReportPane from "../components/operatorPane/EditReportPane.vue";
-import Map from "../composables/Map.vue";
-import stringSimilarity from 'string-similarity'; 
-import {ref,onMounted,watch} from "vue";
-import axios from "axios";
+    import testAlert from "../testComposables/testAlert.vue";
+    import EditReportPane from "../components/operatorPane/EditReportPane.vue";
+    import Map from "../composables/Map.vue";
+    import stringSimilarity from 'string-similarity';
+    import {
+        ref,
+        onMounted,
+        watch
+    } from "vue";
+    import axios from "axios";
 
-onMounted(()=>{
-  initializeDataFetching();  
-  getLocations();
-  getResponders();
-});
-
-const posts = ref([]);
-const postID = ref();
-const additionalDescription = ref("");
-
-
-const pending = ref(0);
-const cancelled = ref(0);
-const acknowledged = ref(0);
-const sent = ref(0);
-const locations = ref([]);
-const responders = ref([]);
-const city_responders = ref([]);
-
-const city = ref();
-const zipcode = ref();
-
-const mapText = ref();
-const mapType = ref();
-
-const alertModal = ref(false);
-
-
-const getPost = async () =>{
-  try{
-    posts.value = [];
-    sent.value=0;
-    pending.value = 0;
-    acknowledged.value = 0;
-    cancelled.value = 0;
-    const response = await fetch(`http://localhost:8080/getPost`);
-    const data = await response.json();
-
-  for(var i = 0; i < data.length ; i++){
-    if (data[i].status == 'Pending') {
-      const timestamp = new Date(data[i].timestamp);
-
-      const month = timestamp.getMonth() + 1; 
-      const day = timestamp.getDate();
-      const year = timestamp.getFullYear();
-
-      let hours = timestamp.getHours();
-      const minutes = timestamp.getMinutes();
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12; 
-      const time = hours + ':' + (minutes < 10 ? '0' : '') + minutes + ' ' + ampm;
-
-      posts.value.push({
-        id: data[i].post_id,
-        description: data[i].description,
-        type: data[i].emergency_type,
-        address: data[i].address,
-        month: month,
-        day: day,
-        year: year,
-        time: time,
-        city: data[i].city,
-        zipcode: data[i].zipcode
-      });
-      pending.value++;
-    }
-    else if(data[i].status=='Sent'){
-      sent.value++;
-    }
-    else if(data[i].status=='Acknowledged'){
-      acknowledged.value++;
-    }
-    else if(data[i].status=='Cancelled'){
-      cancelled.value++;
-    }
-
-    // const currentLength = posts.value.length;
-
-    // // Trigger action if there's a change in length
-    // if (currentLength > previousLength) {
-    //     const audio = new Audio(`src/assets/alert.mp3`);
-    //     audio.play();
-    //     previousLength = currentLength;
-    //     openModal();
-    // }
-
-  }
-
-  }
-  catch(error){
-    console.log(error);
-  }
-
-
-}
-
-const openModal = () => {
-  alertModal.value=true;
-}
-const closeModal = () => {
-  alertModal.value=false;
-}
-
-const postDetails = ref();
-const location = ref();
-const typeOfEmergency = ref([]);
-const deployed_team = ref([]);
-
-
-const fire = ref(false);
-const flood = ref(false);
-const assault = ref(false);
-const injuries = ref(false);
-const biohazard = ref(false);
-const others = ref(false);
-const address = ref();
-
-const getDetails = async (id) =>{
-  typeOfEmergency.value = ([]);
-  city_responders.value = ([]);
-  fire.value = false
-  flood.value = false;
-  assault.value = false;
-  injuries.value = false;
-  biohazard.value = false;
-  others.value = false;
-  
-  postID.value = id;
-
-  const response = await fetch(`http://localhost:8080/getSinglePost/${id}`);
-  const data = await response.json();
-  postDetails.value = data[0].description;
-  mapText.value = data[0].description;
-  location.value = `${data[0].address}`;
-
-  city.value = data[0].city;
-  zipcode.value = data[0].zipcode;
-
-  var description = data[0].description;
-  var type = data[0].emergency_type;
-  if(data[0].emergency_type=='Fire'){
-    fire.value=true;  mapType.value='fire_station'
-    getCityResponders(description,type);
-  }
-  else if(data[0].emergency_type=='Flood'){flood.value=true;}
-  else if(data[0].emergency_type=='Assault'){assault.value=true;}
-  else if(data[0].emergency_type=='Injuries'){injuries.value=true;}
-  else if(data[0].emergency_type=='Biohazard'){biohazard.value=true;}
-  else if(data[0].emergency_type=='Others'){others.value=true;}
-  
-  typeOfEmergency.value.push({emergency: data[0].emergency_type});
-
-
-
-}
-
-const getCityResponders = async (description,type) =>{
-  const location_name = detectLocation(description)
-  const city = await location_city(location_name);
-  
-  for(var i = 0 ; i < responders.value.length; i++){
-    if(responders.value[i].location==city && responders.value[i].type=='fire_station'){
-      city_responders.value.push({eru:responders.value[i].name});
-    }
-  }
-}
-
-function checked (isChecked,value){
-  console.log(isChecked,value)
-  if (isChecked) {
-    typeOfEmergency.value.push({ emergency: value });
-  } else {
-    const index = typeOfEmergency.value.findIndex((item) => item.emergency === value);
-    if (index !== -1) {
-      typeOfEmergency.value.splice(index, 1);
-    }
-  }
-}
-
-function team_checked(isChecked, value) {
-  console.log(isChecked, value);
-  if (isChecked) {
-    deployed_team.value.push({ eru: value });
-  } else {
-    const index = deployed_team.value.findIndex((item) => item.eru === value);
-    if (index !== -1) {
-      deployed_team.value.splice(index, 1);
-    }
-  }
-}
-
-// send poster
-const editPostLocation = async (id) => {
-  try {
-    const response = await axios.put(`http://localhost:8080/updateLocation/${id}`,{
-      address: location.value
+    onMounted(() => {
+        initializeDataFetching();
+        getLocations();
+        getResponders();
     });
-    // window.location.reload();
-  } catch (error) {
-    console.error(
-      "Error acknowledging post:",
-      error.message || "Unknown error"
-    );
-  }
-}
 
-const additionalResponseTeam = async (name) => {
-  try {
-    const formData = new FormData();
-    formData.append("post_id", postID.value);
-    formData.append("name", name);
+    const posts = ref([]);
+    const postID = ref();
+    const additionalDescription = ref("");
 
-    const response = await axios.post(
-      "http://localhost:8080/addPostTeam",
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
-    );
-  } catch (error) {
-    console.log("Error: ", error);
-  }
-};
-const sendPost = async () => {
-  try {
-    const operatorUserID = localStorage.getItem("operator_userId");
-    const response = await fetch("http://localhost:8080/getOperator");
-    const data = await response.json();
-    for (var i = 0; i < data.length; i++) {
-      if (operatorUserID == data[i].user_id) {
-        const operatorID = data[i].operator_id;
-        await axios.put(`http://localhost:8080/updatePost/${postID.value}`, {
-          responder_id: null,
-          operator_id: operatorID,
-          additional_description: additionalDescription.value,
-          post_id: postID.value,
+
+    const pending = ref(0);
+    const cancelled = ref(0);
+    const acknowledged = ref(0);
+    const sent = ref(0);
+    const locations = ref([]);
+    const responders = ref([]);
+    const city_responders = ref([]);
+
+    const city = ref();
+    const zipcode = ref();
+
+    const mapText = ref();
+    const mapType = ref();
+
+    const alertModal = ref(false);
+
+
+    const getPost = async() => {
+        try {
+            posts.value = [];
+            sent.value = 0;
+            pending.value = 0;
+            acknowledged.value = 0;
+            cancelled.value = 0;
+            const response = await fetch(`http://localhost:8080/getPost`);
+            const data = await response.json();
+
+            for (var i = 0; i < data.length; i++) {
+                if (data[i].status == 'Pending') {
+                    const timestamp = new Date(data[i].timestamp);
+
+                    const month = timestamp.getMonth() + 1;
+                    const day = timestamp.getDate();
+                    const year = timestamp.getFullYear();
+
+                    let hours = timestamp.getHours();
+                    const minutes = timestamp.getMinutes();
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    const time = hours + ':' + (minutes < 10 ? '0' : '') + minutes + ' ' + ampm;
+
+                    posts.value.push({
+                        id: data[i].post_id,
+                        description: data[i].description,
+                        type: data[i].emergency_type,
+                        address: data[i].address,
+                        month: month,
+                        day: day,
+                        year: year,
+                        time: time,
+                        city: data[i].city,
+                        zipcode: data[i].zipcode
+                    });
+                    pending.value++;
+                } else if (data[i].status == 'Sent') {
+                    sent.value++;
+                } else if (data[i].status == 'Acknowledged') {
+                    acknowledged.value++;
+                } else if (data[i].status == 'Cancelled') {
+                    cancelled.value++;
+                }
+
+                // const currentLength = posts.value.length;
+
+                // // Trigger action if there's a change in length
+                // if (currentLength > previousLength) {
+                //     const audio = new Audio(`src/assets/alert.mp3`);
+                //     audio.play();
+                //     previousLength = currentLength;
+                //     openModal();
+                // }
+
+            }
+
+        } catch (error) {
+            console.log(error);
+        }
+
+
+    }
+
+    const openModal = () => {
+        alertModal.value = true;
+    }
+    const closeModal = () => {
+        alertModal.value = false;
+    }
+
+    const postDetails = ref();
+    const location = ref();
+    const typeOfEmergency = ref([]);
+    const deployed_team = ref([]);
+
+
+    const fire = ref(false);
+    const flood = ref(false);
+    const assault = ref(false);
+    const injuries = ref(false);
+    const biohazard = ref(false);
+    const others = ref(false);
+    const address = ref();
+
+    const getDetails = async(id) => {
+        typeOfEmergency.value = ([]);
+        city_responders.value = ([]);
+        fire.value = false
+        flood.value = false;
+        assault.value = false;
+        injuries.value = false;
+        biohazard.value = false;
+        others.value = false;
+
+        postID.value = id;
+
+        const response = await fetch(`http://localhost:8080/getSinglePost/${id}`);
+        const data = await response.json();
+        postDetails.value = data[0].description;
+        mapText.value = data[0].description;
+        location.value = `${data[0].address}`;
+
+        city.value = data[0].city;
+        zipcode.value = data[0].zipcode;
+
+        var description = data[0].description;
+        var type = data[0].emergency_type;
+        if (data[0].emergency_type == 'Fire') {
+            fire.value = true;
+            mapType.value = 'fire_station'
+            getCityResponders(description, type);
+        } else if (data[0].emergency_type == 'Flood') {
+            flood.value = true;
+        } else if (data[0].emergency_type == 'Assault') {
+            assault.value = true;
+        } else if (data[0].emergency_type == 'Injuries') {
+            injuries.value = true;
+        } else if (data[0].emergency_type == 'Biohazard') {
+            biohazard.value = true;
+        } else if (data[0].emergency_type == 'Others') {
+            others.value = true;
+        }
+
+        typeOfEmergency.value.push({
+            emergency: data[0].emergency_type
         });
 
-        sentPost(postID.value);
-        editPostLocation(postID.value);
-        for(var i = 0 ; i < deployed_team.value.length ; i ++){
-          additionalResponseTeam(deployed_team.value[i].eru);
-        }
-        window.location.reload();
-        break;
-      }
+
+
     }
-  } catch (error) {
-    console.error("Error acknowledging post:", error);
-  }
-};
 
-const sentPost = async (id) => {
-  try {
-    const response = await axios.put(`http://localhost:8080/sendPost/${id}`);
-    // window.location.reload();
-  } catch (error) {
-    console.error(
-      "Error acknowledging post:",
-      error.message || "Unknown error"
-    );
-  }
-};
+    const getCityResponders = async(description, type) => {
+        const location_name = detectLocation(description)
+        const city = await location_city(location_name);
 
-const denyPost = async (id) => {
-  try {
-    const response = await axios.put(`http://localhost:8080/denyPost/${id}`);
-    window.location.reload();
-  } catch (error) {
-    console.error(
-      "Error acknowledging post:",
-      error.message || "Unknown error"
-    );
-  }
-};
-
-
-
-
-
-// location getter
-
-const getLocations = async () => {
-  const response = await fetch('http://localhost:8080/getLocation');
-  const data = await response.json();
-  for(var i = 0 ; i < data.length ; i ++){
-    locations.value.push(data[i].name);
-  }
-};
-
-const getResponders = async () => {
-  const response = await fetch('http://localhost:8080/getResponderUnits');
-  const data = await response.json();
-  for(var i = 0 ; i < data.length ; i ++){
-    responders.value.push({
-      name: data[i].name,
-      location: data[i].location,
-      type:data[i].type
-    });
-  }
-};
-
-
-
-const detectLocation = (text) => {  
-  const sentence = text.toLowerCase().replace(/\s+/g, '');
-  const matchedLocation = locations.value.find(location => sentence.includes(location));
-  
-  if (matchedLocation) {
-    return matchedLocation;
-  } else {
-    const similarities = locations.value.map(location => stringSimilarity.compareTwoStrings(sentence, location));
-    const maxSimilarityIndex = similarities.indexOf(Math.max(...similarities));
-    return maxSimilarityIndex !== -1 ? locations.value[maxSimilarityIndex] : '';
-  }
-};
-
-const location_city = async (detectedLocation) =>{
-  const response = await fetch('http://localhost:8080/getLocation');
-  const data = await response.json();
-  for(var i = 0 ; i < data.length; i ++){
-    if(detectedLocation==data[i].name){
-
-      return data[i].location;
-    }
-  }
-}
-
-const location_zipcode = async (detectedLocation) =>{
-  const response = await fetch('http://localhost:8080/getLocation');
-  const data = await response.json();
-  for(var i = 0 ; i < data.length; i ++){
-    if(detectedLocation==data[i].name){
-
-      return data[i].zipcode;
-    }
-  }
-}
-
-
-const initializeDataFetching = async () => {
-    try {
-        // Initial data fetch
-        await getPost();
-
-        // Polling every second
-        setInterval(async () => {
-            try {
-                const response = await fetch(`http://localhost:8080/getPost`);
-                const data = await response.json();
-                let lth = 0;
-                for(var i =0 ; i < data.length;i++){
-                  if(data[i].status=='Pending'){
-                    lth++;
-                  }
-                }
-                if (lth > posts.value.length) {
-                  getPost();
-                  const audio = new Audio(`src/assets/alert.mp3`); 
-                  audio.play();
-                  openModal();
-                }
-            } catch (error) {
-                console.error('Error fetching posts:', error);
+        for (var i = 0; i < responders.value.length; i++) {
+            if (responders.value[i].location == city && responders.value[i].type == 'fire_station') {
+                city_responders.value.push({
+                    eru: responders.value[i].name
+                });
             }
-        }, 1000);
-    } catch (error) {
-        console.error('Error initializing data fetching:', error);
+        }
     }
-};
+
+    function checked(isChecked, value) {
+        console.log(isChecked, value)
+        if (isChecked) {
+            typeOfEmergency.value.push({
+                emergency: value
+            });
+        } else {
+            const index = typeOfEmergency.value.findIndex((item) => item.emergency === value);
+            if (index !== -1) {
+                typeOfEmergency.value.splice(index, 1);
+            }
+        }
+    }
+
+    function team_checked(isChecked, value) {
+        console.log(isChecked, value);
+        if (isChecked) {
+            deployed_team.value.push({
+                eru: value
+            });
+        } else {
+            const index = deployed_team.value.findIndex((item) => item.eru === value);
+            if (index !== -1) {
+                deployed_team.value.splice(index, 1);
+            }
+        }
+    }
+
+    // send poster
+    const editPostLocation = async(id) => {
+        try {
+            const response = await axios.put(`http://localhost:8080/updateLocation/${id}`, {
+                address: location.value
+            });
+            // window.location.reload();
+        } catch (error) {
+            console.error(
+                "Error acknowledging post:",
+                error.message || "Unknown error"
+            );
+        }
+    }
+
+    const additionalResponseTeam = async(name) => {
+        try {
+            const formData = new FormData();
+            formData.append("post_id", postID.value);
+            formData.append("name", name);
+
+            const response = await axios.post(
+                "http://localhost:8080/addPostTeam",
+                formData, {
+                    headers: {
+                        "Content-Type": "multipart/form-data",
+                    },
+                }
+            );
+        } catch (error) {
+            console.log("Error: ", error);
+        }
+    };
+    const sendPost = async() => {
+        try {
+            const operatorUserID = localStorage.getItem("operator_userId");
+            const response = await fetch("http://localhost:8080/getOperator");
+            const data = await response.json();
+            for (var i = 0; i < data.length; i++) {
+                if (operatorUserID == data[i].user_id) {
+                    const operatorID = data[i].operator_id;
+                    await axios.put(`http://localhost:8080/updatePost/${postID.value}`, {
+                        responder_id: null,
+                        operator_id: operatorID,
+                        additional_description: additionalDescription.value,
+                        post_id: postID.value,
+                    });
+
+                    sentPost(postID.value);
+                    editPostLocation(postID.value);
+                    for (var i = 0; i < deployed_team.value.length; i++) {
+                        additionalResponseTeam(deployed_team.value[i].eru);
+                    }
+                    window.location.reload();
+                    break;
+                }
+            }
+        } catch (error) {
+            console.error("Error acknowledging post:", error);
+        }
+    };
+
+    const sentPost = async(id) => {
+        try {
+            const response = await axios.put(`http://localhost:8080/sendPost/${id}`);
+            // window.location.reload();
+        } catch (error) {
+            console.error(
+                "Error acknowledging post:",
+                error.message || "Unknown error"
+            );
+        }
+    };
+
+    const denyPost = async(id) => {
+        try {
+            const response = await axios.put(`http://localhost:8080/denyPost/${id}`);
+            window.location.reload();
+        } catch (error) {
+            console.error(
+                "Error acknowledging post:",
+                error.message || "Unknown error"
+            );
+        }
+    };
 
 
 
+
+
+    // location getter
+
+    const getLocations = async() => {
+        const response = await fetch('http://localhost:8080/getLocation');
+        const data = await response.json();
+        for (var i = 0; i < data.length; i++) {
+            locations.value.push(data[i].name);
+        }
+    };
+
+    const getResponders = async() => {
+        const response = await fetch('http://localhost:8080/getResponderUnits');
+        const data = await response.json();
+        for (var i = 0; i < data.length; i++) {
+            responders.value.push({
+                name: data[i].name,
+                location: data[i].location,
+                type: data[i].type
+            });
+        }
+    };
+
+
+
+    const detectLocation = (text) => {
+        const sentence = text.toLowerCase().replace(/\s+/g, '');
+        const matchedLocation = locations.value.find(location => sentence.includes(location));
+
+        if (matchedLocation) {
+            return matchedLocation;
+        } else {
+            const similarities = locations.value.map(location => stringSimilarity.compareTwoStrings(sentence, location));
+            const maxSimilarityIndex = similarities.indexOf(Math.max(...similarities));
+            return maxSimilarityIndex !== -1 ? locations.value[maxSimilarityIndex] : '';
+        }
+    };
+
+    const location_city = async(detectedLocation) => {
+        const response = await fetch('http://localhost:8080/getLocation');
+        const data = await response.json();
+        for (var i = 0; i < data.length; i++) {
+            if (detectedLocation == data[i].name) {
+
+                return data[i].location;
+            }
+        }
+    }
+
+    const location_zipcode = async(detectedLocation) => {
+        const response = await fetch('http://localhost:8080/getLocation');
+        const data = await response.json();
+        for (var i = 0; i < data.length; i++) {
+            if (detectedLocation == data[i].name) {
+
+                return data[i].zipcode;
+            }
+        }
+    }
+
+
+    const initializeDataFetching = async() => {
+        try {
+            // Initial data fetch
+            await getPost();
+
+            // Polling every second
+            setInterval(async() => {
+                try {
+                    const response = await fetch(`http://localhost:8080/getPost`);
+                    const data = await response.json();
+                    let lth = 0;
+                    for (var i = 0; i < data.length; i++) {
+                        if (data[i].status == 'Pending') {
+                            lth++;
+                        }
+                    }
+                    if (lth > posts.value.length) {
+                        getPost();
+                        const audio = new Audio(`src/assets/alert.mp3`);
+                        audio.play();
+                        openModal();
+                    }
+                } catch (error) {
+                    console.error('Error fetching posts:', error);
+                }
+            }, 1000);
+        } catch (error) {
+            console.error('Error initializing data fetching:', error);
+        }
+    };
 </script>

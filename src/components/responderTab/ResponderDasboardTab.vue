@@ -522,6 +522,13 @@ const getSingleOperator = async (id) => {
   return `${data[0].first_name} ${data[0].last_name}`;
 };
 
+const updateTimeSent = async () => {
+  await axios.put(`http://localhost:8080/updatePostTimeAcknowledged/${postID.value}`, {
+          timeAcknowledged: new Date().toISOString(), // current timestamp
+
+        });
+}
+
 const acknowledgePost = async () => {
   const post_report = await getSinglePostReport(postID.value);
   var operator_id = post_report.operator_id;
@@ -529,8 +536,16 @@ const acknowledgePost = async () => {
     await axios.put(`http://localhost:8080/updatePost/${postID.value}`, {
       responder_id: localStorage.getItem("responder_userId"),
       operator_id: operator_id,
+      timeAcknowledged: new Date().toISOString(), // current timestamp
       additional_description: additionalDescription.value,
       post_id: postID.value,
+    });
+    const currentDateTime = new Date();
+    currentDateTime.setHours(currentDateTime.getHours() + 8); // Add 8 hours for UTC+8
+    const utcPlus8Timestamp = currentDateTime.toISOString();
+
+    await axios.put(`http://localhost:8080/updatePostTimeAcknowledged/${postID.value}`, {
+        timeAcknowledged: utcPlus8Timestamp,
     });
 
     await axios.put(`http://localhost:8080/acknowledgePost/${postID.value}`);

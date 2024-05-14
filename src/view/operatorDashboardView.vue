@@ -429,6 +429,13 @@ const additionalResponseTeam = async (name) => {
     console.log("Error: ", error);
   }
 };
+
+const updateTimeSent = async () => {
+  await axios.put(`http://localhost:8080/updatePostTimeSent/${postID.value}`, {
+    timeSent: new Date().toISOString(), // current timestamp
+  });
+}
+
 const sendPost = async () => {
   try {
     const operatorUserID = localStorage.getItem("operator_userId");
@@ -443,7 +450,13 @@ const sendPost = async () => {
           additional_description: additionalDescription.value,
           post_id: postID.value,
         });
+        const currentDateTime = new Date();
+        currentDateTime.setHours(currentDateTime.getHours() + 8); // Add 8 hours for UTC+8
+        const utcPlus8Timestamp = currentDateTime.toISOString();
 
+        await axios.put(`http://localhost:8080/updatePostTimeSent/${postID.value}`, {
+            timeSent: utcPlus8Timestamp,
+        });        
         sentPost(postID.value);
         editPostLocation(postID.value);
         for (var i = 0; i < deployed_team.value.length; i++) {
